@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小朋友自动赛跑游戏 - 分屏视图（带跳跃）</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .info-panel {
+            background-color: #f0f0f0;
+            padding: 10px;
+            text-align: center;
+        }
+        .race-tracks {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .race-track {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            perspective: 1000px;
+            border-bottom: 2px solid #333;
+        }
+        .sky {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50000px;
+            height: 40%;
+            background-color: #87CEEB;
+        }
+        .ground {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 50000px;
+            height: 60%;
+            background-color: #90EE90;
+            z-index: -1;
+        }
+        .road {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 50000px;
+            height: 30%;
+            background: repeating-linear-gradient(
+                90deg,
+                #A0522D 0px,
+                #A0522D 50px,
+                #8B4513 50px,
+                #8B4513 100px
+            );
+        }
+        .runner {
+            position: absolute;
+            width: 50px;
+            height: 100px;
+            bottom: 30%;
+            transition: bottom 0.2s ease-out;
+        }
+        .runner::before {
+            content: '';
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            bottom: 0;
+            background-color: #FFD700; /* 金色衣服 */
+            border-radius: 25px 25px 0 0;
+        }
+        .runner::after {
+            content: '';
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            bottom: 50px;
+            left: 10px;
+            background-color: #FFA07A; /* 浅鲜肉色脸 */
+            border-radius: 50%;
+        }
+        .finish-line {
+            position: absolute;
+            bottom: 30%;
+            width: 10px;
+            height: 30%;
+            background-color: white;
+            left: 100%;
+        }
+        #startButton {
+            font-size: 16px;
+            padding: 10px 20px;
+            margin-top: 10px;
+        }
+        .winner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            flex-direction: column;
+        }
+        .winner-overlay button {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin-top: 20px;
+        }
+        .road-segment {
+            position: absolute;
+            height: 30%;
+            bottom: 0;
+            width: 100px;
+            background-color: #A0522D;
+            transform-origin: bottom;
+        }
+        .ground-segment {
+            position: absolute;
+            height: 60%;
+            bottom: 0;
+            width: 100px;
+            background-color: #90EE90;
+        }
+        .viewport {
+            position: absolute;
+            width: 50000px;
+            height: 100%;
+            transition: transform 0.1s linear;
+        }
+        
+        .distance-marker {
+            position: absolute;
+            bottom: 60%;
+            left: 20px;
+            font-size: 14px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 2px 5px;
+            border-radius: 3px;
+            z-index: 20;
+        }
+        .jumping {
+            animation: jump 0.5s linear;
+        }
+        @keyframes jump {
+            0% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-100px);
+            }
+            100% {
+                transform: translateY(0);
+            }
+        }
+        .treasure {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: #FFD700;
+            border: 3px solid #B8860B;
+            border-radius: 50%;
+            z-index: 1000;
+            box-shadow: 0 0 15px #FFD700;
+            animation: float 2s infinite ease-in-out;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .collected {
+            opacity: 0.5;
+        }
+        .health-bar {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            width: 200px;
+            height: 20px;
+            background-color: #FF4500;
+            border: 2px solid #333;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        .health-bar-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.1s linear;
+            border-radius: 3px;
+        }
+        .health-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+        }
+        .effect {
+            position: absolute;
+            font-size: 24px;
+            animation: float 1s ease-out;
+            z-index: 1000;
+        }
+        @keyframes float {
+            0% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+            100% {
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="info-panel">
+            <h1>小朋友自动赛跑游戏</h1>
+            <p>距离: 5000米</p>
+            <p>时间: <span id="timeElapsed">0:00</span> / 5:00</p>
+            <button id="startButton">开始比赛</button>
+            <p>上面的小人'W'键跳跃，下面的小人按'↑'键跳跃</p>
+        </div>
+        <div class="race-tracks">
+            <div class="race-track" id="raceTrack1">
+                <div class="health-bar">
+                    <div class="health-bar-fill" id="health1" style="width: 100%"></div>
+                    <div class="health-text">100/100</div>
+                </div>
+                <div class="viewport">
+                    <div class="sky"></div>
+                    <div class="ground"></div>
+                    <div class="road"></div>
+                    <div class="runner" id="runner1"></div>
+                    <div class="distance-marker" id="marker1">0米</div>
+                </div>
+            </div>
+            <div class="race-track" id="raceTrack2">
+                <div class="health-bar">
+                    <div class="health-bar-fill" id="health2" style="width: 100%"></div>
+                    <div class="health-text">100/100</div>
+                </div>
+                <div class="viewport">
+                    <div class="sky"></div>
+                    <div class="ground"></div>
+                    <div class="road"></div>
+                    <div class="runner" id="runner2"></div>
+                    <div class="distance-marker" id="marker2">0米</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const RACE_DISTANCE = 5000; // 米
+        const RACE_TIME = 300; // 5分钟 = 300秒
+        const TICK_INTERVAL = 100; // 毫秒
+        const METERS_PER_PIXEL = 0.1; // 每素代表0.1米
+        const VISIBLE_METERS = 100; // 可见距离为100米
+        const VIEWPORT_WIDTH = VISIBLE_METERS / METERS_PER_PIXEL; // 视口宽度（像素）
+        const TOTAL_WIDTH = RACE_DISTANCE / METERS_PER_PIXEL; // 总路程宽度（像素）
+        const BASE_SPEED = 16.67; // 基础速度（米/秒）(5000米/300秒)
+        const SPEED_VARIATION = 5; // 速度变化范围（米/秒）
+        const JUMP_HEIGHT = 150; // 跳跃高度(像素)
+        const JUMP_DURATION = 500; // 跳跃持续时间(毫秒)
+        const TREASURE_SPAWN_INTERVAL = 1000; // 每秒生成一次
+        const MAX_TREASURES = 15; // 增加最大宝箱数量
+        const TREASURE_SPAWN_CHANCE = 0.8; // 提高生成概率到80%
+        const MIN_TREASURE_DISTANCE = 100; // 最小宝箱间距（像素）
+        const TREASURE_TYPES = ['ground', 'air']; // 宝箱类型：地面和空中
+        const TREASURE_CLEANUP_DISTANCE = 1000; // 宝箱清理距离
+        const TREASURE_SPAWN_DISTANCE = 200; // 宝箱生成距离
+        const MAX_TREASURES_PER_TRACK = 8; // 每个赛道最多8个宝箱
+        const ITEM_TYPES = ['grenade', 'health', 'thunder'];
+        const GRENADE_DAMAGE = 5;
+        const HEALTH_RESTORE = 3;
+        const THUNDER_DURATION = 5000; // 5秒
+        const SECTION_LENGTH = 100; // 每个路段的长度（米）
+        const MIN_TREASURES_PER_SECTION = 1; // 每个路段最少宝箱数
+        const MAX_TREASURES_PER_SECTION = 2; // 每个路段最多宝箱数
+
+        let player1 = null;
+        let player2 = null;
+        let raceStarted = false;
+        let timeElapsed = 0;
+        let runner1Position = 0;
+        let runner2Position = 0;
+        let winner = null;
+        let intervalId = null;
+        let treasures = [];
+        let lastTreasureSpawn = 0;
+
+        const raceTrack1 = document.getElementById('raceTrack1');
+        const raceTrack2 = document.getElementById('raceTrack2');
+        const runner1 = document.getElementById('runner1');
+        const runner2 = document.getElementById('runner2');
+        const startButton = document.getElementById('startButton');
+        const timeElapsedSpan = document.getElementById('timeElapsed');
+
+        function updateRunnerPosition(runner, position) {
+            runner.style.left = `${(position / RACE_DISTANCE) * 100}%`;
+        }
+
+        function updateViewport(raceTrack, viewportStart) {
+            raceTrack.style.transform = `translateX(-${(viewportStart / RACE_DISTANCE) * 100}%)`;
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function jump(runner) {
+            if (!runner.classList.contains('jumping')) {
+                runner.classList.add('jumping');
+                const currentBottom = parseInt(runner.style.bottom) || 30;
+                runner.style.bottom = `${currentBottom + JUMP_HEIGHT}px`;
+                
+                setTimeout(() => {
+                    runner.style.bottom = '30%';
+                    runner.classList.remove('jumping');
+                }, JUMP_DURATION);
+            }
+        }
+
+        function createRoadSegment(x) {
+            const segment = document.createElement('div');
+            segment.className = 'road-segment';
+            segment.style.left = `${x}px`;
+            
+            const ground = document.createElement('div');
+            ground.className = 'ground-segment';
+            ground.style.left = `${x}px`;
+            
+            return { road: segment, ground: ground };
+        }
+
+        function updateRoad(raceTrack, runnerPosition) {
+            // 计算当前需要显示的路段起始位置
+            const startSegment = Math.floor(runnerPosition / SEGMENT_WIDTH);
+            
+            // 移除不再见的路段
+            while (roadSegments.length > 0 && 
+                   roadSegments[0].position < startSegment) {
+                const segment = roadSegments.shift();
+                segment.road.remove();
+                segment.ground.remove();
+            }
+            
+            // 添加新的路段
+            while (roadSegments.length < VISIBLE_SEGMENTS) {
+                const position = startSegment + roadSegments.length;
+                const x = position * SEGMENT_WIDTH;
+                const segment = createRoadSegment(x);
+                raceTrack.appendChild(segment.ground);
+                raceTrack.appendChild(segment.road);
+                roadSegments.push({
+                    position: position,
+                    road: segment.road,
+                    ground: segment.ground
+                });
+            }
+            
+            // 更新视口位置
+            const viewportOffset = runnerPosition - (VIEWPORT_WIDTH * 0.3);
+            raceTrack.style.transform = `translateX(-${viewportOffset}px)`;
+        }
+
+        function updateGame() {
+            timeElapsed += TICK_INTERVAL / 1000;
+            timeElapsedSpan.textContent = formatTime(timeElapsed);
+
+            const now = Date.now();
+            let speed1 = (BASE_SPEED + Math.random() * SPEED_VARIATION) * (TICK_INTERVAL / 1000);
+            let speed2 = (BASE_SPEED + Math.random() * SPEED_VARIATION) * (TICK_INTERVAL / 1000);
+
+            // 应用减速效果
+            if (player1.isSlowed && now < player1.slowEndTime) {
+                speed1 *= 0.5;
+            }
+            if (player2.isSlowed && now < player2.slowEndTime) {
+                speed2 *= 0.5;
+            }
+
+            // 更新位置
+            runner1Position += speed1;
+            runner2Position += speed2;
+
+            // 生成和清理宝箱
+            if (now - lastTreasureSpawn > TREASURE_SPAWN_INTERVAL) {
+                spawnTreasure(raceTrack1);
+                spawnTreasure(raceTrack2);
+                lastTreasureSpawn = now;
+                cleanupTreasures(); // 定期清理宝箱
+            }
+
+            // 检查碰撞
+            treasures.forEach(treasure => {
+                if (!treasure.collected) {
+                    if (treasure.track === raceTrack1 && treasure.checkCollision(runner1)) {
+                        treasure.collect(runner1);
+                    } else if (treasure.track === raceTrack2 && treasure.checkCollision(runner2)) {
+                        treasure.collect(runner2);
+                    }
+                }
+            });
+
+            // 限制在总路程范围内
+            runner1Position = Math.min(runner1Position, RACE_DISTANCE);
+            runner2Position = Math.min(runner2Position, RACE_DISTANCE);
+
+            // 更新视口和跑步者位置
+            const viewport1 = raceTrack1.querySelector('.viewport');
+            const viewport2 = raceTrack2.querySelector('.viewport');
+
+            const offset1 = (runner1Position / METERS_PER_PIXEL);
+            const offset2 = (runner2Position / METERS_PER_PIXEL);
+
+            // 更新跑步者位置
+            runner1.style.left = `${offset1 + VIEWPORT_WIDTH * 0.2}px`;
+            runner2.style.left = `${offset2 + VIEWPORT_WIDTH * 0.2}px`;
+
+            // 更新视口位置
+            viewport1.style.transform = `translateX(-${offset1}px)`;
+            viewport2.style.transform = `translateX(-${offset2}px)`;
+
+            // 更新距离标记
+            document.getElementById('marker1').textContent = 
+                `${Math.floor(runner1Position)}米 / ${RACE_DISTANCE}米`;
+            document.getElementById('marker2').textContent = 
+                `${Math.floor(runner2Position)}米 / ${RACE_DISTANCE}米`;
+
+            // 检查游戏结束条件
+            if (runner1Position >= RACE_DISTANCE || runner2Position >= RACE_DISTANCE || 
+                player1.health <= 0 || player2.health <= 0) {
+                if (player1.health <= 0) winner = '小红';
+                else if (player2.health <= 0) winner = '小明';
+                else winner = runner1Position >= RACE_DISTANCE ? '小明' : '小红';
+                
+                clearInterval(intervalId);
+                showWinner();
+            }
+        }
+
+        function startRace() {
+            // 基本变量重置
+            raceStarted = true;
+            runner1Position = 0;
+            runner2Position = 0;
+            timeElapsed = 0;
+            winner = null;
+
+            // 重置视口位置
+            const viewport1 = raceTrack1.querySelector('.viewport');
+            const viewport2 = raceTrack2.querySelector('.viewport');
+            viewport1.style.transform = 'translateX(0)';
+            viewport2.style.transform = 'translateX(0)';
+
+            // 重置跑步者位置
+            runner1.style.left = `${VIEWPORT_WIDTH * 0.2}px`;
+            runner2.style.left = `${VIEWPORT_WIDTH * 0.2}px`;
+
+            // 创建玩家对象
+            player1 = new Player(runner1, raceTrack1, 1);
+            player2 = new Player(runner2, raceTrack2, 2);
+
+            // 设置玩家之间的引用
+            player1.otherPlayer = player2;
+            player2.otherPlayer = player1;
+
+            // 重置血条
+            player1.health = 100;
+            player2.health = 100;
+            player1.updateHealthBar();
+            player2.updateHealthBar();
+
+            // 清理所有宝箱
+            treasures.forEach(treasure => {
+                if (treasure.element && treasure.element.parentNode) {
+                    treasure.element.remove();
+                }
+            });
+            treasures = [];
+            lastTreasureSpawn = Date.now();
+
+            // 启动游戏循环
+            startButton.disabled = true;
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            intervalId = setInterval(updateGame, TICK_INTERVAL);
+        }
+
+        function showWinner() {
+            const overlay = document.createElement('div');
+            overlay.className = 'winner-overlay';
+            overlay.innerHTML = `
+                <p>${winner} 赢了!</p>
+                <p>用时: ${formatTime(timeElapsed)}</p>
+                <p>平均速度: ${(RACE_DISTANCE / timeElapsed).toFixed(2)}米/秒</p>
+                <button onclick="restartGame()">重新开始</button>
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        function restartGame() {
+            const overlay = document.querySelector('.winner-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+            startButton.disabled = false;
+            raceTrack1.style.transform = 'translateX(0)';
+            raceTrack2.style.transform = 'translateX(0)';
+            startRace();
+        }
+
+        function spawnTreasure(track) {
+            const currentPosition = track === raceTrack1 ? runner1Position : runner2Position;
+            
+            // 在前方200-400像素范围内生成宝箱
+            const spawnX = currentPosition / METERS_PER_PIXEL + 200 + Math.random() * 200;
+            const treasure = new Treasure(track, 'air', spawnX);
+            treasures.push(treasure);
+        }
+
+        function cleanupTreasures() {
+            const currentTime = Date.now();
+            treasures = treasures.filter(treasure => {
+                // 移除已收集的宝箱
+                if (treasure.collected) {
+                    treasure.element.remove();
+                    return false;
+                }
+
+                // 移除太远的宝箱
+                const track = treasure.track;
+                const runnerPos = track === raceTrack1 ? runner1Position : runner2Position;
+                const treasurePos = treasure.x * METERS_PER_PIXEL;
+                
+                if (treasurePos < runnerPos - SECTION_LENGTH) {
+                    treasure.element.remove();
+                    return false;
+                }
+
+                return true;
+            });
+        }
+
+        function updateTreasures() {
+            treasures.forEach(treasure => {
+                if (treasure.checkCollision(runner1)) {
+                    treasure.collect();
+                }
+                if (treasure.checkCollision(runner2)) {
+                    treasure.collect();
+                }
+            });
+        }
+
+        startButton.addEventListener('click', startRace);
+
+        document.addEventListener('keydown', (event) => {
+            if (raceStarted) {
+                if (event.key === 'w' || event.key === 'W') {
+                    jump(runner1);
+                } else if (event.key === 'ArrowUp') {
+                    jump(runner2);
+                }
+            }
+        });
+
+        // 添加宝箱类
+        class Treasure {
+            constructor(track, type, x) {
+                this.element = document.createElement('div');
+                this.element.className = 'treasure';
+                this.track = track;
+                this.collected = false;
+                this.itemType = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+                
+                // 设置宝箱位置
+                const viewport = track.querySelector('.viewport');
+                if (!viewport) return;
+
+                // 计算位置
+                this.x = x;
+                this.y = Math.random() * 50 + 250; // 250%-300%之间的高度，需要跳跃才能获取
+                
+                // 设置宝箱样式和位置
+                this.element.style.cssText = `
+                    left: ${this.x}px;
+                    bottom: ${this.y}px;
+                    position: absolute;
+                    width: 40px;
+                    height: 40px;
+                    background-color: #FFD700;
+                    border: 3px solid #B8860B;
+                    border-radius: 50%;
+                    z-index: 1000;
+                    box-shadow: 0 0 15px #FFD700;
+                `;
+                
+                // 添加到视口
+                viewport.appendChild(this.element);
+                
+                // 添加道具类型指示
+                const itemEmoji = {
+                    'grenade': '💣',
+                    'health': '❤️',
+                    'thunder': '⚡'
+                };
+                this.element.innerHTML = `<span style="font-size: 20px; line-height: 40px;">${itemEmoji[this.itemType]}</span>`;
+            }
+
+            checkCollision(runner) {
+                if (this.collected) return false;
+                
+                const runnerRect = runner.getBoundingClientRect();
+                const treasureRect = this.element.getBoundingClientRect();
+                
+                // 增加碰撞检测范围
+                const collisionMargin = 30;
+                return !(
+                    runnerRect.right < treasureRect.left - collisionMargin || 
+                    runnerRect.left > treasureRect.right + collisionMargin || 
+                    runnerRect.bottom < treasureRect.top - collisionMargin || 
+                    runnerRect.top > treasureRect.bottom + collisionMargin
+                );
+            }
+
+            collect(runner) {
+                if (this.collected) return;
+                
+                this.collected = true;
+                const targetPlayer = runner === runner1 ? player1 : player2;
+                if (targetPlayer) {
+                    targetPlayer.currentItem = this.itemType;
+                    // 添加收集动画
+                    this.element.style.transform = 'scale(0)';
+                    this.element.style.opacity = '0';
+                    this.element.style.transition = 'all 0.3s ease-out';
+                    
+                    setTimeout(() => {
+                        if (targetPlayer.autoUseItem) {
+                            targetPlayer.autoUseItem();
+                        }
+                        if (this.element.parentNode) {
+                            this.element.parentNode.removeChild(this.element);
+                        }
+                    }, 300);
+                }
+            }
+        }
+
+        // 添加玩家类来管理道具和状态
+        class Player {
+            constructor(runner, track, playerNum) {
+                this.runner = runner;
+                this.track = track;
+                this.playerNum = playerNum;
+                this.health = 100;
+                this.currentItem = null;
+                this.isSlowed = false;
+                this.slowEndTime = 0;
+                this.otherPlayer = null;
+            }
+
+            // 自动使用道具
+            autoUseItem() {
+                if (this.currentItem) {
+                    switch (this.currentItem) {
+                        case 'grenade':
+                            if (this.otherPlayer) {
+                                console.log(`Player ${this.playerNum} using grenade on Player ${this.otherPlayer.playerNum}`);
+                                this.otherPlayer.takeDamage(GRENADE_DAMAGE);
+                                this.showEffect('💣', this.otherPlayer.runner);
+                            }
+                            break;
+                        case 'health':
+                            this.health = Math.min(100, this.health + HEALTH_RESTORE);
+                            this.updateHealthBar();
+                            this.showEffect('❤️', this.runner);
+                            break;
+                        case 'thunder':
+                            if (this.otherPlayer) {
+                                console.log(`Player ${this.playerNum} using thunder on Player ${this.otherPlayer.playerNum}`);
+                                this.otherPlayer.applyThunderEffect();
+                                this.showEffect('⚡', this.otherPlayer.runner);
+                            }
+                            break;
+                    }
+                    this.currentItem = null;
+                }
+            }
+
+            takeDamage(amount) {
+                this.health = Math.max(0, this.health - amount);
+                
+                // 确保血条更新
+                const healthBar = document.getElementById(`health${this.playerNum}`);
+                const healthText = document.querySelector(`#raceTrack${this.playerNum} .health-text`);
+                
+                if (healthBar) {
+                    healthBar.style.width = `${this.health}%`;
+                }
+                if (healthText) {
+                    healthText.textContent = `${this.health}/100`;
+                }
+
+                // 显示伤害效果
+                this.showEffect(`-${amount}`, this.runner);
+                
+                // 检查死亡
+                if (this.health <= 0) {
+                    winner = this.playerNum === 1 ? '小红' : '小明';
+                    clearInterval(intervalId);
+                    showWinner();
+                }
+            }
+
+            updateHealthBar() {
+                const healthBar = document.getElementById(`health${this.playerNum}`);
+                const healthText = document.querySelector(`#raceTrack${this.playerNum} .health-text`);
+                
+                if (healthBar && healthText) {
+                    healthBar.style.width = `${this.health}%`;
+                    healthText.textContent = `${this.health}/100`;
+                }
+            }
+
+            applyThunderEffect() {
+                this.isSlowed = true;
+                this.slowEndTime = Date.now() + THUNDER_DURATION;
+                this.showEffect('⚡', this.runner);
+            }
+
+            showEffect(text, element) {
+                const effect = document.createElement('div');
+                effect.className = 'effect';
+                effect.textContent = text;
+                effect.style.position = 'absolute';
+                effect.style.left = '50%';
+                effect.style.top = '50%';
+                effect.style.transform = 'translate(-50%, -50%)';
+                effect.style.fontSize = '24px';
+                effect.style.color = text.startsWith('-') ? 'red' : 'white';
+                effect.style.textShadow = '2px 2px 2px black';
+                element.appendChild(effect);
+                
+                setTimeout(() => effect.remove(), 1000);
+            }
+        }
+    </script>
+</body>
+</html>
